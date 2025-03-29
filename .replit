@@ -1,0 +1,51 @@
+modules = ["cpp", "python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Build and Run PIM Compiler"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "build_and_run_compiler"
+
+[[workflows.workflow]]
+name = "Build and Run PIM Compiler"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mkdir -p build && cd build && cmake -DHAVE_CLANG=OFF .. && make && ./pim_compiler -v ../examples/matrix_mult.cpp -o matrix_mult_output.txt && cat matrix_mult_output.txt"
+
+[[workflows.workflow]]
+name = "build_and_run_compiler"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mkdir -p build && cd build && cmake .. && make && ./pim_compiler -v ../examples/matrix_mult.cpp"
+
+[deployment]
+run = ["sh", "-c", "mkdir -p build && cd build && cmake -DHAVE_CLANG=OFF .. && make && ./pim_compiler -v ../examples/matrix_mult.cpp -o matrix_mult_output.txt && cat matrix_mult_output.txt"]
