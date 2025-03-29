@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Project setup
+include(FetchContent)
+
 # Find LLVM
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -101,6 +104,8 @@ else()
         ${llvm_libs}
     )
 endif()
+
+# No external libraries needed
 
 # Add compile options
 target_compile_options(pim_compiler PRIVATE

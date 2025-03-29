@@ -116,7 +116,6 @@ public:
 private:
     std::vector<std::unique_ptr<RefactoringRule>> rules;
     int verbosityLevel;
-    Logger logger;
     
     /**
      * @brief Initialize the refactoring rules

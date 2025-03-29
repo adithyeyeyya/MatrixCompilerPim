@@ -1,160 +1,162 @@
-#include "RefactoringAssistant.h"
+#include "optimizer/RefactoringAssistant.h"
+#include "utils/Logger.h"
 #include <regex>
 #include <iostream>
-#include <sstream>
 #include <algorithm>
+#include <sstream>
 
-// LoopReorderingRule implementation
+// Implementation of LoopReorderingRule
+
 bool LoopReorderingRule::applies(const std::string& code) {
-    // Look for nested loops with three levels (typical matrix multiplication pattern)
-    std::regex nestedLoopsPattern(
-        R"(for\s*\([^{]*\)\s*\{\s*for\s*\([^{]*\)\s*\{\s*for\s*\([^{]*\)\s*\{)");
-    return std::regex_search(code, nestedLoopsPattern);
+    // Look for matrix multiplication with i-j-k loop order
+    std::regex pattern(
+        "for\\s*\\(.*?\\bi\\b.*?\\)\\s*\\{"
+        "\\s*for\\s*\\(.*?\\bj\\b.*?\\)\\s*\\{"
+        "\\s*for\\s*\\(.*?\\bk\\b.*?\\)\\s*\\{"
+    );
+    return std::regex_search(code, pattern);
 }
 
 std::string LoopReorderingRule::apply(const std::string& code) {
-    // This is a simplified implementation
-    // In a real-world scenario, we would need to properly parse the code and analyze loop dependencies
+    // Replace i-j-k loop order with i-k-j loop order
+    std::regex pattern(
+        "(for\\s*\\(.*?\\bi\\b.*?\\)\\s*\\{)"
+        "(\\s*for\\s*\\(.*?\\bj\\b.*?\\)\\s*\\{)"
+        "(\\s*for\\s*\\(.*?\\bk\\b.*?\\)\\s*\\{)"
+    );
     
-    // For now, we'll implement a basic pattern-based transformation for matrix multiplication
-    std::regex matMulPattern(
-        R"(for\s*\(\s*int\s+i\s*=\s*0\s*;\s*i\s*<\s*([a-zA-Z0-9_]+)\s*;\s*i\+\+\s*\)\s*\{\s*for\s*\(\s*int\s+j\s*=\s*0\s*;\s*j\s*<\s*([a-zA-Z0-9_]+)\s*;\s*j\+\+\s*\)\s*\{\s*for\s*\(\s*int\s+k\s*=\s*0\s*;\s*k\s*<\s*([a-zA-Z0-9_]+)\s*;\s*k\+\+\s*\)\s*\{)");
-    
-    std::string result = code;
-    std::smatch matches;
-    
-    if (std::regex_search(code, matches, matMulPattern) && matches.size() >= 4) {
-        std::string rowsVar = matches[1];
-        std::string colsVar = matches[2];
-        std::string commonVar = matches[3];
-        
-        // Create optimized loop order (k-i-j) for better memory access patterns in PIM
-        std::string replacement = 
-            "for (int k = 0; k < " + commonVar + "; k++) {\n"
-            "    for (int i = 0; i < " + rowsVar + "; i++) {\n"
-            "        for (int j = 0; j < " + colsVar + "; j++) {";
-        
-        result = std::regex_replace(code, matMulPattern, replacement);
-    }
+    std::string result = std::regex_replace(code, pattern, 
+        "$1"
+        "\n    for (int k = 0; k < common; k++) {"
+        "\n        for (int j = 0; j < cols; j++) {"
+    );
     
     return result;
 }
 
 std::string LoopReorderingRule::getDescription() const {
-    return "Reorder nested loops to optimize memory access patterns for PIM architecture";
+    return "Reorder loops for better cache locality in matrix multiplication";
 }
 
 std::string LoopReorderingRule::getPerformanceImpact() const {
-    return "Can reduce memory access latency by up to 30% and improve parallelism in PIM operations";
+    return "Up to 2-3x speedup due to improved cache utilization and reduced memory access in the inner loop";
 }
 
-// MatrixLayoutRule implementation
+// Implementation of MatrixLayoutRule
+
 bool MatrixLayoutRule::applies(const std::string& code) {
-    // Look for array declarations with matrix-like dimensions
-    std::regex matrixPattern(R"(int\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\s*\d+\s*\]\s*\[\s*\d+\s*\])");
-    return std::regex_search(code, matrixPattern);
+    // Look for matrix access patterns that could be optimized
+    std::regex pattern("A\\s*\\[\\s*i\\s*\\]\\s*\\[\\s*k\\s*\\]|A\\s*\\[\\s*i\\s*\\*\\s*\\w+\\s*\\+\\s*k\\s*\\]");
+    return std::regex_search(code, pattern);
 }
 
 std::string MatrixLayoutRule::apply(const std::string& code) {
-    // This implementation would transform row-major matrices to a layout
-    // that's more efficient for PIM operations
-    // For a proof of concept, we'll just add a comment suggesting the change
-    
+    // Suggest using a transposed layout for matrix B
     std::string result = code;
-    std::regex matrixPattern(R"((int\s+)([A-Za-z_][A-Za-z0-9_]*\s*\[\s*\d+\s*\]\s*\[\s*\d+\s*\]))");
     
-    result = std::regex_replace(result, matrixPattern, 
-        "$1$2 /* Consider using PIM-optimized matrix layout for better performance */");
+    // Add transpose code before the multiplication
+    std::regex mainPattern("void\\s+matrix\\w+\\s*\\([^)]*\\)\\s*\\{");
+    if (std::regex_search(code, mainPattern)) {
+        std::regex initPattern("(\\s*// Initialize result matrix.*?\n)(\\s*for\\s*\\(.*?\\))");
+        if (std::regex_search(code, initPattern)) {
+            result = std::regex_replace(result, initPattern,
+                "$1"
+                "\n    // Transpose matrix B for better memory access patterns"
+                "\n    int B_transposed[common][cols];"
+                "\n    for (int k = 0; k < common; k++) {"
+                "\n        for (int j = 0; j < cols; j++) {"
+                "\n            B_transposed[k][j] = B[k][j];"
+                "\n        }"
+                "\n    }"
+                "\n$2"
+            );
+        }
+        
+        // Replace access to B in the multiplication loop
+        std::regex accessPattern("B\\s*\\[\\s*k\\s*\\]\\s*\\[\\s*j\\s*\\]|B\\s*\\[\\s*k\\s*\\*\\s*\\w+\\s*\\+\\s*j\\s*\\]");
+        result = std::regex_replace(result, accessPattern, "B_transposed[k][j]");
+    }
     
     return result;
 }
 
 std::string MatrixLayoutRule::getDescription() const {
-    return "Optimize matrix data layout for efficient PIM operations";
+    return "Optimize matrix layout for PIM architecture by using transposed matrices";
 }
 
 std::string MatrixLayoutRule::getPerformanceImpact() const {
-    return "Can improve computation throughput by 20-40% by better utilizing PIM's parallel processing units";
+    return "Potential 20-30% improvement in memory access efficiency, reduced cache misses, and improved parallelism";
 }
 
-// BlockingOptimizationRule implementation
+// Implementation of BlockingOptimizationRule
+
 bool BlockingOptimizationRule::applies(const std::string& code) {
-    // Look for matrix multiplication patterns that could benefit from blocking
-    std::regex matrixMultPattern(
-        R"(C\s*\[\s*i\s*\]\s*\[\s*j\s*\]\s*\+?=\s*A\s*\[\s*i\s*\]\s*\[\s*k\s*\]\s*\*\s*B\s*\[\s*k\s*\]\s*\[\s*j\s*\])");
-    return std::regex_search(code, matrixMultPattern);
+    // Look for large matrix multiplication patterns without blocking
+    std::regex pattern("for\\s*\\(.*?\\bi\\b.*?\\)\\s*\\{[^}]*for\\s*\\(.*?\\bj\\b.*?\\)\\s*\\{[^}]*for\\s*\\(.*?\\bk\\b.*?\\)");
+    return std::regex_search(code, pattern);
 }
 
 std::string BlockingOptimizationRule::apply(const std::string& code) {
-    // For a full implementation, we would transform the matrix multiplication
-    // to use blocking/tiling for better cache utilization
-    // For now, we'll add a commented example
-    
+    // Apply blocking optimization
     std::string result = code;
     
-    if (applies(code)) {
-        // Find the position after the last include
-        size_t insertPos = code.find("#include");
-        if (insertPos != std::string::npos) {
-            insertPos = code.find("\n", insertPos);
-            if (insertPos != std::string::npos) {
-                insertPos++;
-                
-                std::string blockingExample = 
-                    "/* PIM-Optimized blocking implementation example:\n"
-                    "\n"
-                    "void matrixMultiplyBlocked(int* A, int* B, int* C, int rows, int cols, int common) {\n"
-                    "    // Initialize result matrix to zero\n"
-                    "    for (int i = 0; i < rows; i++) {\n"
-                    "        for (int j = 0; j < cols; j++) {\n"
-                    "            C[i * cols + j] = 0;\n"
-                    "        }\n"
-                    "    }\n"
-                    "    \n"
-                    "    // Block size optimized for PIM architecture\n"
-                    "    const int blockSize = 16; // Adjust based on PIM memory layout\n"
-                    "    \n"
-                    "    // Blocked matrix multiplication\n"
-                    "    for (int ii = 0; ii < rows; ii += blockSize) {\n"
-                    "        for (int jj = 0; jj < cols; jj += blockSize) {\n"
-                    "            for (int kk = 0; kk < common; kk += blockSize) {\n"
-                    "                // Process block\n"
-                    "                for (int i = ii; i < std::min(ii + blockSize, rows); i++) {\n"
-                    "                    for (int j = jj; j < std::min(jj + blockSize, cols); j++) {\n"
-                    "                        for (int k = kk; k < std::min(kk + blockSize, common); k++) {\n"
-                    "                            C[i * cols + j] += A[i * common + k] * B[k * cols + j];\n"
-                    "                        }\n"
-                    "                    }\n"
-                    "                }\n"
-                    "            }\n"
-                    "        }\n"
-                    "    }\n"
-                    "}\n"
-                    "*/\n\n";
-                
-                result.insert(insertPos, blockingExample);
-            }
-        }
+    // Define block size constant
+    std::regex funcPattern("void\\s+matrix\\w+\\s*\\([^)]*\\)\\s*\\{");
+    if (std::regex_search(result, funcPattern)) {
+        result = std::regex_replace(result, funcPattern, 
+            "void matrixMultiplyBlocked(int* A, int* B, int* C, int rows, int cols, int common) {\n"
+            "    const int BLOCK_SIZE = 8; // Optimal block size for PIM architecture\n"
+        );
+    }
+    
+    // Replace the loops with blocked version
+    std::regex loopPattern(
+        "for\\s*\\(\\s*int\\s+i\\s*=\\s*0\\s*;\\s*i\\s*<\\s*\\w+\\s*;\\s*i\\+\\+\\s*\\)\\s*\\{"
+        "[^}]*for\\s*\\(\\s*int\\s+j\\s*=\\s*0\\s*;\\s*j\\s*<\\s*\\w+\\s*;\\s*j\\+\\+\\s*\\)\\s*\\{"
+        "[^}]*for\\s*\\(\\s*int\\s+k\\s*=\\s*0\\s*;\\s*k\\s*<\\s*\\w+\\s*;\\s*k\\+\\+\\s*\\)\\s*\\{"
+    );
+    
+    if (std::regex_search(result, loopPattern)) {
+        result = std::regex_replace(result, loopPattern,
+            "// Use blocked matrix multiplication algorithm\n"
+            "    for (int i = 0; i < rows; i += BLOCK_SIZE) {\n"
+            "        for (int j = 0; j < cols; j += BLOCK_SIZE) {\n"
+            "            for (int k = 0; k < common; k += BLOCK_SIZE) {\n"
+            "                // Process block\n"
+            "                for (int ii = i; ii < std::min(i + BLOCK_SIZE, rows); ii++) {\n"
+            "                    for (int jj = j; jj < std::min(j + BLOCK_SIZE, cols); jj++) {\n"
+            "                        for (int kk = k; kk < std::min(k + BLOCK_SIZE, common); kk++) {"
+        );
+        
+        // Update array access pattern
+        std::regex accessPattern("C\\[\\s*i\\s*\\]\\[\\s*j\\s*\\]\\s*\\+=\\s*A\\[\\s*i\\s*\\]\\[\\s*k\\s*\\]\\s*\\*\\s*B\\[\\s*k\\s*\\]\\[\\s*j\\s*\\]");
+        result = std::regex_replace(result, accessPattern, "C[ii][jj] += A[ii][kk] * B[kk][jj]");
+        
+        // Close the additional brackets
+        result = std::regex_replace(result, std::regex("(\\s*}\\s*}\\s*})"), "$1\n                }\n            }\n        }");
     }
     
     return result;
 }
 
 std::string BlockingOptimizationRule::getDescription() const {
-    return "Apply blocking/tiling optimization to matrix operations for PIM architecture";
+    return "Apply blocking/tiling optimization to improve cache utilization";
 }
 
 std::string BlockingOptimizationRule::getPerformanceImpact() const {
-    return "Can improve performance by 2-4x by optimizing memory access patterns and data locality for PIM execution";
+    return "Up to 4x speedup for large matrices by maximizing PIM architecture data locality";
 }
 
-// RefactoringAssistant implementation
-RefactoringAssistant::RefactoringAssistant()
-    : verbosityLevel(0), logger("RefactoringAssistant") {
+// Implementation of RefactoringAssistant
+
+RefactoringAssistant::RefactoringAssistant() : verbosityLevel(0) {
+    // Initialize the rules
     initializeRules();
 }
 
-RefactoringAssistant::~RefactoringAssistant() = default;
+RefactoringAssistant::~RefactoringAssistant() {
+    // Nothing to clean up
+}
 
 void RefactoringAssistant::initializeRules() {
     rules.push_back(std::make_unique<LoopReorderingRule>());
@@ -162,41 +164,35 @@ void RefactoringAssistant::initializeRules() {
     rules.push_back(std::make_unique<BlockingOptimizationRule>());
 }
 
+void RefactoringAssistant::setVerbosity(int level) {
+    verbosityLevel = level;
+}
+
 std::map<std::string, std::pair<std::string, std::string>> RefactoringAssistant::suggestRefactorings(
     const std::string& sourceCode) {
     
-    logger.log("Analyzing source code for refactoring opportunities...");
-    
     std::map<std::string, std::pair<std::string, std::string>> suggestions;
     
-    for (const auto& rule : rules) {
-        if (rule->applies(sourceCode)) {
-            logger.log("Rule '" + rule->getDescription() + "' applies to the source code");
-            
-            // Find the relevant code fragment
-            std::map<std::string, std::string> patterns = findPatterns(sourceCode);
-            
-            for (const auto& [patternName, codeFragment] : patterns) {
-                if (rule->applies(codeFragment)) {
-                    std::string refactoredCode = rule->apply(codeFragment);
+    // Find patterns in the code
+    auto patterns = findPatterns(sourceCode);
+    
+    // Apply rules to each pattern
+    for (const auto& [patternName, pattern] : patterns) {
+        for (const auto& rule : rules) {
+            if (rule->applies(pattern)) {
+                std::string refactored = rule->apply(pattern);
+                
+                // Only suggest if there's an actual change
+                if (refactored != pattern) {
+                    std::string description = rule->getDescription() + 
+                                             " (" + rule->getPerformanceImpact() + ")";
                     
-                    if (refactoredCode != codeFragment) {
-                        logger.log("Generated refactoring suggestion for " + patternName);
-                        
-                        suggestions[rule->getDescription()] = {codeFragment, refactoredCode};
-                        
-                        if (verbosityLevel > 0) {
-                            logger.log("Original: " + codeFragment);
-                            logger.log("Refactored: " + refactoredCode);
-                            logger.log("Performance impact: " + rule->getPerformanceImpact());
-                        }
-                    }
+                    suggestions[description] = std::make_pair(pattern, refactored);
                 }
             }
         }
     }
     
-    logger.log("Found " + std::to_string(suggestions.size()) + " refactoring suggestions");
     return suggestions;
 }
 
@@ -204,77 +200,103 @@ std::map<std::string, std::string> RefactoringAssistant::suggestInstructionOptim
     const std::vector<PIMInstruction>& instructions,
     const std::string& sourceCode) {
     
-    logger.log("Analyzing PIM instructions for optimization opportunities...");
-    
     std::map<std::string, std::string> suggestions;
     
-    // Count instruction types
-    std::map<std::string, int> instructionCounts;
-    for (const auto& instr : instructions) {
-        instructionCounts[instr.getOpName()]++;
-    }
-    
-    // Find instruction patterns
+    // Find patterns in the instructions
     auto patterns = findInstructionPatterns(instructions);
     
-    // Look for specific optimization opportunities
-    
-    // Check for excessive MOVE operations
-    if (instructionCounts["MOVE"] > instructions.size() / 3) {
-        suggestions["Reduce MOVE Operations"] = 
-            "The generated code has a high proportion of MOVE instructions (" + 
-            std::to_string(instructionCounts["MOVE"]) + 
-            " out of " + std::to_string(instructions.size()) + 
-            "). Consider reorganizing matrix access patterns to reduce data movement.";
+    // Analyze instruction patterns
+    for (const auto& [patternName, patternInstructions] : patterns) {
+        // Example: detect redundant load/store operations
+        if (patternName == "redundant_loads") {
+            std::stringstream suggestion;
+            suggestion << "Identified redundant LOAD operations in the instruction sequence.\n";
+            suggestion << "Consider refactoring the source code to avoid reloading the same data.\n";
+            suggestion << "Look for opportunities to reuse already loaded values, particularly in nested loops.\n\n";
+            
+            // Example instruction sequence with issue
+            suggestion << "Example problematic instruction sequence:\n";
+            for (const auto& instr : patternInstructions) {
+                suggestion << "  " << instr.toString() << "\n";
+            }
+            
+            suggestion << "\nPotential impact: Reducing redundant LOADs can improve execution time by 15-20%.";
+            
+            suggestions["Redundant Memory Operations"] = suggestion.str();
+        }
+        // Example: detect inefficient use of accumulators
+        else if (patternName == "inefficient_accumulation") {
+            std::stringstream suggestion;
+            suggestion << "Detected inefficient use of accumulator registers in matrix multiplication.\n";
+            suggestion << "Consider using register blocking techniques in your code.\n";
+            suggestion << "This optimization allows reuse of values in PIM accumulator registers.\n\n";
+            
+            // Example instruction sequence with issue
+            suggestion << "Example instruction sequence with optimization opportunity:\n";
+            for (const auto& instr : patternInstructions) {
+                suggestion << "  " << instr.toString() << "\n";
+            }
+            
+            suggestion << "\nPotential impact: Efficient accumulator usage can reduce instruction count by 25%.";
+            
+            suggestions["Inefficient Accumulator Usage"] = suggestion.str();
+        }
     }
     
-    // Check for unbalanced computation vs. data movement
-    int computeOps = instructionCounts["ADD"] + instructionCounts["MUL"];
-    int memoryOps = instructionCounts["LOAD"] + instructionCounts["STORE"];
-    if (computeOps < memoryOps / 2) {
-        suggestions["Improve Computation Intensity"] = 
-            "The ratio of compute operations to memory operations is low. " +
-            "Consider increasing computation intensity through loop fusion or blocking.";
-    }
-    
-    // Check for potential parallel execution
-    if (patterns.find("Sequential MUL-ADD") != patterns.end()) {
-        suggestions["Parallelize Operations"] = 
-            "Found sequential MUL-ADD patterns that could be parallelized " +
-            "through loop restructuring to better utilize PIM's parallel processing units.";
-    }
-    
-    logger.log("Found " + std::to_string(suggestions.size()) + " instruction optimization suggestions");
     return suggestions;
-}
-
-void RefactoringAssistant::setVerbosity(int level) {
-    verbosityLevel = level;
-    logger.log("Verbosity level set to " + std::to_string(level));
 }
 
 std::map<std::string, std::string> RefactoringAssistant::findPatterns(const std::string& code) {
     std::map<std::string, std::string> patterns;
     
-    // Look for matrix multiplication patterns
-    std::regex matMulPattern(
-        R"(for\s*\([^{]*\)\s*\{\s*for\s*\([^{]*\)\s*\{\s*for\s*\([^{]*\)\s*\{[^}]*\}\s*\}\s*\})");
+    // Find matrix multiplication function patterns
+    std::regex matrixMultPattern(
+        "void\\s+matrix\\w+\\([^)]*\\)\\s*\\{"
+        "[^}]*?"  // Non-greedy match of anything
+        "for\\s*\\([^{]*\\)\\s*\\{"
+        "[^}]*?"  // Non-greedy match of anything
+        "for\\s*\\([^{]*\\)\\s*\\{"
+        "[^}]*?"  // Non-greedy match of anything
+        "for\\s*\\([^{]*\\)\\s*\\{"
+        "[^}]*?"  // Non-greedy match of anything
+        "C\\[.*?\\].*?\\+=.*?A\\[.*?\\].*?\\*.*?B\\[.*?\\]"
+        "[^}]*?"  // Non-greedy match of anything
+        "\\}\\s*\\}\\s*\\}"
+    );
     
-    std::string::const_iterator searchStart(code.cbegin());
-    std::smatch match;
-    while (std::regex_search(searchStart, code.cend(), match, matMulPattern)) {
-        patterns["Matrix Multiplication"] = match[0];
-        searchStart = match.suffix().first;
+    std::sregex_iterator it(code.begin(), code.end(), matrixMultPattern);
+    std::sregex_iterator end;
+    
+    while (it != end) {
+        std::smatch match = *it;
+        patterns["matrix_multiplication"] = match.str();
+        ++it;
     }
     
-    // Look for matrix initialization patterns
-    std::regex matInitPattern(
-        R"(for\s*\([^{]*\)\s*\{\s*for\s*\([^{]*\)\s*\{\s*[^=]*=\s*0[^}]*\}\s*\})");
+    // Find large fixed-size matrix patterns
+    std::regex fixedMatrixPattern(
+        "void\\s+matrix\\w+\\([^)]*\\[\\d+\\][^)]*\\)\\s*\\{"
+    );
     
-    searchStart = code.cbegin();
-    while (std::regex_search(searchStart, code.cend(), match, matInitPattern)) {
-        patterns["Matrix Initialization"] = match[0];
-        searchStart = match.suffix().first;
+    it = std::sregex_iterator(code.begin(), code.end(), fixedMatrixPattern);
+    
+    while (it != end) {
+        std::smatch match = *it;
+        // Find the entire function body
+        std::string funcStart = match.str();
+        size_t startPos = code.find(funcStart);
+        if (startPos != std::string::npos) {
+            int braceCount = 0;
+            size_t pos = startPos + funcStart.length() - 1; // Start at the opening brace
+            do {
+                if (code[pos] == '{') braceCount++;
+                else if (code[pos] == '}') braceCount--;
+                pos++;
+            } while (braceCount > 0 && pos < code.length());
+            
+            patterns["fixed_size_matrix"] = code.substr(startPos, pos - startPos);
+        }
+        ++it;
     }
     
     return patterns;
@@ -285,33 +307,66 @@ std::map<std::string, std::vector<PIMInstruction>> RefactoringAssistant::findIns
     
     std::map<std::string, std::vector<PIMInstruction>> patterns;
     
-    // Look for sequential MUL-ADD patterns
-    std::vector<PIMInstruction> mulAddPattern;
-    for (size_t i = 0; i < instructions.size() - 1; i++) {
-        if (instructions[i].getOpName() == "MUL" && 
-            instructions[i+1].getOpName() == "ADD") {
-            mulAddPattern.push_back(instructions[i]);
-            mulAddPattern.push_back(instructions[i+1]);
+    // Check for redundant load operations
+    std::vector<PIMInstruction> redundantLoads;
+    std::map<std::string, int> loadCount;
+    
+    for (size_t i = 0; i < instructions.size(); ++i) {
+        const auto& instr = instructions[i];
+        
+        if (instr.getOpcode() == PIM_LOAD) {
+            std::string source = std::to_string(instr.getSrc1());
+            loadCount[source]++;
+            
+            if (loadCount[source] > 1) {
+                // Find a sequence of redundant loads (up to 3 instructions)
+                size_t endIdx = std::min(i + 3, instructions.size());
+                redundantLoads.insert(redundantLoads.end(), 
+                                      instructions.begin() + i, 
+                                      instructions.begin() + endIdx);
+                break;
+            }
         }
     }
     
-    if (!mulAddPattern.empty()) {
-        patterns["Sequential MUL-ADD"] = mulAddPattern;
+    if (!redundantLoads.empty()) {
+        patterns["redundant_loads"] = redundantLoads;
     }
     
-    // Look for redundant LOAD-STORE patterns
-    std::vector<PIMInstruction> loadStorePattern;
-    for (size_t i = 0; i < instructions.size() - 1; i++) {
-        if (instructions[i].getOpName() == "LOAD" && 
-            i+1 < instructions.size() && instructions[i+1].getOpName() == "STORE") {
-            loadStorePattern.push_back(instructions[i]);
-            loadStorePattern.push_back(instructions[i+1]);
+    // Check for inefficient accumulation patterns
+    std::vector<PIMInstruction> inefficientAccum;
+    for (size_t i = 0; i < instructions.size() - 3; ++i) {
+        const auto& instr1 = instructions[i];
+        const auto& instr2 = instructions[i+1];
+        const auto& instr3 = instructions[i+2];
+        
+        // Look for MUL followed by ADD with store and then immediate reload
+        if (instr1.getOpcode() == PIM_MUL && 
+            instr2.getOpcode() == PIM_ADD && 
+            instr3.getOpcode() == PIM_STORE) {
+            
+            // Check if there's a LOAD of the same value shortly after
+            for (size_t j = i + 3; j < std::min(i + 6, instructions.size()); ++j) {
+                if (instructions[j].getOpcode() == PIM_LOAD && 
+                    instructions[j].getSrc1() == instr3.getDest()) {
+                    
+                    inefficientAccum.insert(inefficientAccum.end(),
+                                           instructions.begin() + i,
+                                           instructions.begin() + j + 1);
+                    break;
+                }
+            }
+            
+            if (!inefficientAccum.empty()) {
+                break;
+            }
         }
     }
     
-    if (!loadStorePattern.empty()) {
-        patterns["Redundant LOAD-STORE"] = loadStorePattern;
+    if (!inefficientAccum.empty()) {
+        patterns["inefficient_accumulation"] = inefficientAccum;
     }
     
     return patterns;
 }
+

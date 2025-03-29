@@ -32,6 +32,8 @@ set(CMAKE_MAKEFILE_DEPENDS
   "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/Compiler/GNU-C.cmake"
   "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/Compiler/GNU-CXX.cmake"
   "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/Compiler/GNU.cmake"
+  "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/ExternalProject/shared_internal_commands.cmake"
+  "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/FetchContent.cmake"
   "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/FindLibXml2.cmake"
   "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/FindPackageHandleStandardArgs.cmake"
   "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2/share/cmake-3.29/Modules/FindPackageMessage.cmake"

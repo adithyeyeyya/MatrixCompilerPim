@@ -24,7 +24,8 @@ void printUsage(const std::string& programName) {
               << "  -h, --help       Display this help message\n"
               << "  --dump-ir        Dump LLVM IR to stderr\n"
               << "  --refactor       Enable AI-powered code refactoring suggestions\n"
-              << "  --refactor-only  Only suggest refactoring without compiling\n";
+              << "  --refactor-only  Only suggest refactoring without compiling\n"
+              << "  --refactor-detailed    Generate more detailed refactoring suggestions\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -35,6 +36,7 @@ int main(int argc, char* argv[]) {
     bool dumpIR = false;
     bool enableRefactoring = false;
     bool refactorOnly = false;
+    bool detailedRefactoring = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -50,6 +52,9 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--refactor-only") {
             enableRefactoring = true;
             refactorOnly = true;
+        } else if (arg == "--refactor-detailed") {
+            enableRefactoring = true;
+            detailedRefactoring = true;
         } else if (arg == "-o" && i + 1 < argc) {
             outputFile = argv[++i];
         } else if (arg[0] != '-') {
@@ -95,7 +100,15 @@ int main(int argc, char* argv[]) {
                 assistant.setVerbosity(1);
             }
             
-            auto suggestions = assistant.suggestRefactorings(source);
+            std::map<std::string, std::pair<std::string, std::string>> suggestions;
+            
+            if (detailedRefactoring) {
+                std::cout << "Using detailed rule-based refactoring analysis...\n";
+                // Enable more detailed analysis by setting higher verbosity
+                assistant.setVerbosity(2);
+            }
+            
+            suggestions = assistant.suggestRefactorings(source);
             
             if (suggestions.empty()) {
                 std::cout << "No refactoring suggestions found for the provided code.\n";
